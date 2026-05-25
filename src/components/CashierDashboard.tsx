@@ -50,6 +50,201 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
   const [paymentModalOrder, setPaymentModalOrder] = React.useState<LaundryOrder | null>(null);
   const [paymentMethod, setPaymentMethod] = React.useState<'cash' | 'transfer'>('cash');
 
+  // Modern Web Bluetooth ESC/POS states
+  const [btDevice, setBtDevice] = React.useState<any>(null);
+  const [btCharacteristic, setBtCharacteristic] = React.useState<any>(null);
+  const [isConnectingBt, setIsConnectingBt] = React.useState(false);
+  const [isPrintingBt, setIsPrintingBt] = React.useState(false);
+
+  // Connect to Bluetooth Thermal Printer
+  const connectBluetoothPrinter = async () => {
+    const nav = navigator as any;
+    if (!nav.bluetooth) {
+      alert("Browser Anda belum mendukung Web Bluetooth API secara bawaan, atau Anda tidak membukanya melalui protokol HTTPS aman. Pastikan Anda membukanya melalui tautan langsung (tab baru)!");
+      return;
+    }
+
+    try {
+      setIsConnectingBt(true);
+      console.log("Requesting Bluetooth device...");
+      const device = await nav.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [
+          '000018f0-0000-1000-8000-0085f9b34fb', // Generic Printing service
+          '00001101-0000-1000-8000-00805f9b34fb', // Standard Serial port service
+          'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Custom Chinese thermal write service
+          '49535343-fe7d-4158-933e-1070f2020d56'  // ISSC SPP Service
+        ]
+      });
+
+      console.log("Connecting to GATT Server...");
+      const server = await device.gatt.connect();
+
+      console.log("Finding writable services & characteristic...");
+      const services = await server.getPrimaryServices();
+      let foundChar: any = null;
+
+      for (const service of services) {
+        try {
+          const characteristics = await service.getCharacteristics();
+          for (const char of characteristics) {
+            if (char.properties.write || char.properties.writeWithoutResponse) {
+              foundChar = char;
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not read characteristics of service", service.uuid, e);
+        }
+        if (foundChar) break;
+      }
+
+      if (!foundChar) {
+        // If no explicit characteristic found via filtering, try common raw generic fallback
+        try {
+          // Standard raw printing characteristic handle (usually on generic SPP)
+          const primaryService = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
+          const chars = await primaryService.getCharacteristics();
+          foundChar = chars[0];
+        } catch (fallbackError) {
+          console.warn("Fallback raw serial scan failed:", fallbackError);
+        }
+      }
+
+      if (foundChar) {
+        setBtDevice(device);
+        setBtCharacteristic(foundChar);
+        alert(`Berhasil Terhubung ke: ${device.name || "Printer Thermal Bluetooth"}!`);
+      } else {
+        // If we still can't discover service due to browser security restrictions, offer to save device reference anyway
+        setBtDevice(device);
+        alert(`Perangkat "${device.name || "Printer"}" terpilih. Beberapa browser membatasi pencarian GATT-Characteristic. Jika cetak gagal, harap gunakan fitur standard (Cetak Cetakan)!`);
+      }
+    } catch (err: any) {
+      console.error("Bluetooth pairing error:", err);
+      alert(`Koneksi Gagal: ${err.message || err}`);
+    } finally {
+      setIsConnectingBt(false);
+    }
+  };
+
+  // Disconnect Bluetooth
+  const disconnectBluetooth = () => {
+    if (btDevice && btDevice.gatt?.connected) {
+      btDevice.gatt.disconnect();
+    }
+    setBtDevice(null);
+    setBtCharacteristic(null);
+    alert("Koneksi Printer Bluetooth diputuskan.");
+  };
+
+  // Custom ESC/POS binary formatter & wireless transmitter over Bluetooth BLE
+  const printBtInvoiceESC_POS = async (order: LaundryOrder) => {
+    if (!btDevice) {
+      alert("Silakan hubungkan Printer Bluetooth Anda terlebih dahulu melalui tombol Hubungkan!");
+      return;
+    }
+
+    try {
+      setIsPrintingBt(true);
+      const encoder = new TextEncoder();
+      
+      const cleanLaundryName = (laundry?.name || "CLEAN & FRESH LAUNDRY").toUpperCase();
+      const cleanAddress = (laundry?.address || "Sistem Laundry Modern").substring(0, 32);
+      const cleanPhone = (laundry?.phone || "081234567800").substring(0, 16);
+
+      // Raw command bytes
+      const escInit = new Uint8Array([0x1B, 0x40]);              // ESC @ : Reset
+      const escCenterBlock = new Uint8Array([0x1B, 0x61, 0x01]); // ESC a 1 : Centering
+      const escLeftBlock = new Uint8Array([0x1B, 0x61, 0x00]);   // ESC a 0 : Left justify
+      const escBoldModeOn = new Uint8Array([0x1B, 0x45, 0x01]);  // ESC E 1 : Bold True
+      const escBoldModeOff = new Uint8Array([0x1B, 0x45, 0x00]); // ESC E 0 : Bold False
+      const escDoubleFont = new Uint8Array([0x1D, 0x21, 0x11]);  // GS ! 17 : Double size
+      const escNormalFont = new Uint8Array([0x1D, 0x21, 0x00]);  // GS ! 0 : Normal size
+
+      const linesPayload: Uint8Array[] = [];
+
+      // 1. Initialize
+      linesPayload.push(escInit);
+      linesPayload.push(escCenterBlock);
+      linesPayload.push(escDoubleFont);
+      linesPayload.push(encoder.encode(`${cleanLaundryName}\n`));
+      
+      // 2. Sub-labels
+      linesPayload.push(escNormalFont);
+      linesPayload.push(encoder.encode(`${cleanAddress}\n`));
+      linesPayload.push(encoder.encode(`Telp: ${cleanPhone}\n`));
+      linesPayload.push(encoder.encode("================================\n")); // Standard 32-character limit for 58mm printers
+
+      // 3. Transactions info (Left-alignment)
+      linesPayload.push(escLeftBlock);
+      linesPayload.push(encoder.encode(`Invoice: ${order.invoiceNo}\n`));
+      linesPayload.push(encoder.encode(`Tanggal: ${new Date(order.createdAt).toLocaleDateString('id-ID')}\n`));
+      linesPayload.push(encoder.encode(`Member : ${order.customerName.substring(0, 22)}\n`));
+      linesPayload.push(encoder.encode(`No. HP : ${order.customerPhone.substring(0, 22)}\n`));
+      linesPayload.push(encoder.encode("--------------------------------\n"));
+
+      // 4. Listing service item
+      linesPayload.push(encoder.encode(`${order.serviceName.substring(0, 32)}\n`));
+      
+      const detailsRow = `${order.weight} ${order.unit} x Rp ${order.servicePrice.toLocaleString('id-ID')}`;
+      const totalRow = `Rp ${order.totalPrice.toLocaleString('id-ID')}`;
+      const spacesNeeded = Math.max(1, 32 - detailsRow.length - totalRow.length);
+      const printRowStr = detailsRow + " ".repeat(spacesNeeded) + totalRow + "\n";
+      linesPayload.push(encoder.encode(printRowStr));
+      linesPayload.push(encoder.encode("================================\n"));
+
+      // 5. Grand totals with Bold structure
+      linesPayload.push(escBoldModeOn);
+      const tagText = "TOTAL HARGA:";
+      const sumText = `Rp ${order.totalPrice.toLocaleString('id-ID')}`;
+      const totalSpacing = Math.max(1, 32 - tagText.length - sumText.length);
+      linesPayload.push(encoder.encode(tagText + " ".repeat(totalSpacing) + sumText + "\n"));
+      linesPayload.push(escBoldModeOff);
+
+      // Payment state status
+      const statusTitle = "Status Bayar:";
+      const statusText = order.paymentStatus === 'paid' ? 'LUNAS (Cash/Trsf)' : 'BELUM BAYAR';
+      const statusSpacing = Math.max(1, 32 - statusTitle.length - statusText.length);
+      linesPayload.push(encoder.encode(statusTitle + " ".repeat(statusSpacing) + statusText + "\n"));
+      linesPayload.push(encoder.encode("--------------------------------\n"));
+
+      // 6. Custom greeting footer (Center-alignment)
+      linesPayload.push(escCenterBlock);
+      linesPayload.push(encoder.encode("Terima Kasih Atas\n"));
+      linesPayload.push(encoder.encode("Kepercayaan Anda!\n"));
+      linesPayload.push(encoder.encode("Pakaian bersih & rapi \n"));
+      linesPayload.push(encoder.encode("adalah komitmen terbaik kami.\n\n"));
+      
+      // Feed paper slightly to ease manual tearing 
+      linesPayload.push(new Uint8Array([0x1B, 0x64, 0x04])); // ESC d 4 : print & feed 4 lines
+      linesPayload.push(new Uint8Array([0x1D, 0x56, 0x41, 0x03])); // Cut cmd
+
+      // Send to bluetooth characteristic
+      if (btCharacteristic) {
+        for (const dataChunk of linesPayload) {
+          let pos = 0;
+          while (pos < dataChunk.length) {
+            const part = dataChunk.slice(pos, pos + 20); // Write in chunks of 20 bytes for extreme compatibility
+            await btCharacteristic.writeValue(part);
+            pos += 20;
+            await new Promise(r => setTimeout(r, 20)); // Keep printer buffer secure
+          }
+        }
+        alert("Pencetakan mandiri langsung via Bluetooth berhasil dikirim!");
+      } else {
+        // If GATT exploration failed on this mobile browser but device linked, fallback to virtual simulate printing
+        // This acts as a robust helper alert explaining physical Bluetooth channel limits
+        alert(`Koneksi fisik ke Bluetooth berhasil dikoneksikan ke "${btDevice.name || "Printer"}". Namun browser tidak memberi izin akses karakteristik GATT-raw data. Mohon gunakan print standard dengan browser tab baru!`);
+      }
+    } catch (err: any) {
+      console.error("Bluetooth transmission error:", err);
+      alert(`Pencetakan Gagal: ${err.message || err}. Tip: Pastikan printer bluetooth dinyalakan dan dalam mode pairing.`);
+    } finally {
+      setIsPrintingBt(false);
+    }
+  };
+
   const loadData = () => {
     setServices(laundryService.getServices(currentLaundryId));
     setOrders(laundryService.getOrders(currentLaundryId));
@@ -512,18 +707,73 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
 
             </div>
 
+            {/* BLUETOOTH THERMAL PRINTER SETUP & OPERATION PANEL */}
+            <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200 font-sans text-xs space-y-2.5 no-print">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${btDevice ? 'bg-emerald-400' : 'bg-slate-400'} opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${btDevice ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                  </span>
+                  Printer Bluetooth Thermal (ESC/POS)
+                </span>
+                
+                {btDevice ? (
+                  <button 
+                    onClick={disconnectBluetooth}
+                    className="text-[10px] text-red-650 hover:underline font-bold"
+                  >
+                    Putuskan
+                  </button>
+                ) : null}
+              </div>
+
+              {btDevice ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] text-slate-500 font-mono bg-white p-1.5 border border-slate-200 rounded">
+                    Terhubung: <strong className="text-slate-800">{btDevice.name || "Perangkat Bluetooth"}</strong>
+                  </p>
+                  <button
+                    disabled={isPrintingBt}
+                    onClick={() => printBtInvoiceESC_POS(viewInvoiceOrder)}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-350 text-white font-bold py-2 px-3 rounded-lg transition text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    {isPrintingBt ? (
+                      <span className="inline-block animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></span>
+                    ) : (
+                      <span className="font-bold">⚡</span>
+                    )}
+                    {isPrintingBt ? "Sedang Mencetak..." : "Cetak via Bluetooth (Kertas 58mm)"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled={isConnectingBt}
+                  onClick={connectBluetoothPrinter}
+                  className="w-full bg-slate-800 hover:bg-slate-900 disabled:bg-slate-350 text-white font-bold py-2 px-3 rounded-lg transition text-xs flex items-center justify-center gap-1.5 shadow-xs"
+                >
+                  {isConnectingBt ? (
+                    <span className="inline-block animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></span>
+                  ) : (
+                    <span className="font-bold">✦</span>
+                  )}
+                  {isConnectingBt ? "Mencari Perangkat..." : "Hubungkan Printer Bluetooth"}
+                </button>
+              )}
+            </div>
+
             {/* BUTTONS IN SCREEN MODE */}
-            <div className="mt-6 flex gap-2 w-full font-sans">
+            <div className="mt-4 flex gap-2 w-full font-sans no-print">
               <button 
                 onClick={() => window.print()}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl transition flex items-center justify-center gap-1.5 text-sm"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center gap-1.5 text-sm"
               >
                 <Printer className="w-4 h-4" />
                 Cetak Cetakan
               </button>
               <button 
                 onClick={() => setViewInvoiceOrder(null)}
-                className="flex-1 bg-slate-105 hover:bg-slate-150 text-slate-700 font-bold py-2 rounded-xl transition text-sm text-center"
+                className="flex-1 bg-slate-105 hover:bg-slate-150 text-slate-700 font-bold py-2.5 rounded-xl transition text-sm text-center"
               >
                 Tutup
               </button>
