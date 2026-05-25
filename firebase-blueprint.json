@@ -100,6 +100,22 @@
         "cashierId": { "type": "string" }
       },
       "required": ["paymentId", "orderId", "laundryId", "amount", "paymentMethod", "paymentDate"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Represents money spent on laundry business operations",
+      "type": "object",
+      "properties": {
+        "expenseId": { "type": "string" },
+        "laundryId": { "type": "string" },
+        "category": { "type": "string", "enum": ["operational", "salary", "equipment", "other"] },
+        "title": { "type": "string" },
+        "amount": { "type": "integer" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["expenseId", "laundryId", "category", "title", "amount", "date", "createdAt"]
     }
   },
   "firestore": {
@@ -126,6 +142,18 @@
     "/laundries/{laundryId}/payments/{paymentId}": {
       "schema": "Payment",
       "description": "Subcollection of payments per laundry"
+    },
+    "/laundries/{laundryId}/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Subcollection of business expenses per laundry"
+    },
+    "/orders_by_invoice/{invoiceNo}": {
+      "schema": "Order",
+      "description": "Global index linking invoice numbers to order objects for public tracking"
+    },
+    "/orders_by_invoice/{invoiceNo}/progress/{progressId}": {
+      "schema": "OrderProgress",
+      "description": "Global index linking invoice numbers to progress history for public tracking"
     }
   }
 }

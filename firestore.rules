@@ -100,6 +100,11 @@ service cloud.firestore {
       match /payments/{paymentId} {
         allow read, write: if true;
       }
+
+      // --- EXPENSES SUB-COLLECTION ---
+      match /expenses/{expenseId} {
+        allow read, write: if true;
+      }
     }
   }
 }
