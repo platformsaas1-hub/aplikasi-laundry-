@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents user accounts of all roles (Super Admin, Owner, Cashier, Employee)",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The unique user ID matching Firebase Auth uid" },
+        "email": { "type": "string", "description": "Email address of the user" },
+        "username": { "type": "string", "description": "Username of the cashier/employee" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "role": { "type": "string", "enum": ["super_admin", "owner", "cashier", "employee"], "description": "Role of the user in the system" },
+        "laundryId": { "type": "string", "description": "Associated laundry ID (null for super_admin)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["userId", "role", "name", "createdAt"]
+    },
+    "Laundry": {
+      "title": "Laundry",
+      "description": "Represents laundry business entities registered in the platform",
+      "type": "object",
+      "properties": {
+        "laundryId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["laundryId", "name", "ownerId", "isActive", "createdAt"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Represents laundry services offered by a specific laundry",
+      "type": "object",
+      "properties": {
+        "serviceId": { "type": "string" },
+        "laundryId": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "integer" },
+        "unit": { "type": "string", "enum": ["kg", "pcs"], "description": "Pricing unit: per kg or per piece" },
+        "estimateDays": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["serviceId", "laundryId", "name", "price", "unit", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Represents a laundry order created in the system",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "laundryId": { "type": "string" },
+        "invoiceNo": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "weight": { "type": "number" },
+        "qty": { "type": "integer" },
+        "serviceId": { "type": "string" },
+        "serviceName": { "type": "string" },
+        "servicePrice": { "type": "integer" },
+        "totalPrice": { "type": "integer" },
+        "paymentStatus": { "type": "string", "enum": ["unpaid", "paid"] },
+        "laundryStatus": { "type": "string", "enum": ["diterima", "dicuci", "dikeringkan", "disetrika", "selesai", "diambil"] },
+        "notes": { "type": "string" },
+        "estimatedCompletion": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "cashierId": { "type": "string" }
+      },
+      "required": ["orderId", "laundryId", "invoiceNo", "customerName", "customerPhone", "serviceId", "totalPrice", "paymentStatus", "laundryStatus", "createdAt"]
+    },
+    "OrderProgress": {
+      "title": "OrderProgress",
+      "description": "Historical timeline steps of laundry progress",
+      "type": "object",
+      "properties": {
+        "progressId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "status": { "type": "string", "enum": ["diterima", "dicuci", "dikeringkan", "disetrika", "selesai", "diambil"] },
+        "description": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedByName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["progressId", "orderId", "status", "updatedBy", "updatedByName", "updatedAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Represents a payment transaction for a laundry order",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "laundryId": { "type": "string" },
+        "amount": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "transfer"] },
+        "paymentDate": { "type": "string", "format": "date-time" },
+        "cashierId": { "type": "string" }
+      },
+      "required": ["paymentId", "orderId", "laundryId", "amount", "paymentMethod", "paymentDate"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/laundries/{laundryId}": {
+      "schema": "Laundry",
+      "description": "Laundry business documents"
+    },
+    "/laundries/{laundryId}/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Subcollection of services per laundry"
+    },
+    "/laundries/{laundryId}/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Subcollection of orders per laundry"
+    },
+    "/laundries/{laundryId}/orders/{orderId}/progress/{progressId}": {
+      "schema": "OrderProgress",
+      "description": "Order tracking progress logs"
+    },
+    "/laundries/{laundryId}/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Subcollection of payments per laundry"
+    }
+  }
+}

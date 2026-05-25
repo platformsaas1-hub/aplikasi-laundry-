@@ -1,0 +1,10 @@
+{
+  "name": "Remix: Laundry Modern Multi-Role",
+  "description": "Aplikasi laundry modern berbasis web multi-role dengan tracking publik tanpa login, manajemen order, invoice, cetak struk, dan integrasi Firebase.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

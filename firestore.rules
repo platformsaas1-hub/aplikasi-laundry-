@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for auth state and role evaluation
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUser(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function getAuthUser() {
+      return getUser(request.auth.uid);
+    }
+
+    // Helpers for checking admin based on hardcoded boot email or existing document
+    function isSuperAdmin() {
+      return isSignedIn() && 
+        (('email' in request.auth.token && (request.auth.token.email == 'aisugiharti12@admin.smp.belajar.id' || request.auth.token.email == 'AISUGIHARTI12@admin.smp.belajar.id')) || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getAuthUser().role == 'super_admin'));
+    }
+
+    function isLaundryOwner(laundryId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getAuthUser().role == 'owner' && 
+        getAuthUser().laundryId == laundryId;
+    }
+
+    function isLaundryCashier(laundryId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getAuthUser().role == 'cashier' && 
+        getAuthUser().laundryId == laundryId;
+    }
+
+    function isLaundryEmployee(laundryId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getAuthUser().role == 'employee' && 
+        getAuthUser().laundryId == laundryId;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- INTEGRATION CONNECTIVITY TEST COLLECTION ---
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // --- PUBLIC ORDERS BY INVOICE MAP COLLECTION ---
+    match /orders_by_invoice/{invoiceNo} {
+      // Public tracking page can get any order by its invoice number
+      allow read: if true;
+      // Writing (creating or updating invoice map) is restricted to authenticated staff/owners
+      allow write: if isSignedIn();
+
+      // --- SUB-COLLECTION OF PROGRESS STEPS FOR THIS INVOICE ---
+      match /progress/{progressId} {
+        // Public tracking: anyone can read the progress history
+        allow read: if true;
+        // Staff can write updates
+        allow write: if isSignedIn();
+      }
+    }
+
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      // Anyone can read, create, and update to support unauthenticated cashier/employee sessions
+      allow read, create, update: if true;
+      allow delete: if isSignedIn() && isSuperAdmin();
+    }
+
+    // --- LAUNDRIES COLLECTION ---
+    match /laundries/{laundryId} {
+      // Allow full access to support both Google Authenticated owners and unauthenticated internal employee/cashier roles
+      allow read, write: if true;
+
+      // --- SERVICES SUB-COLLECTION ---
+      match /services/{serviceId} {
+        allow read, write: if true;
+      }
+
+      // --- ORDERS SUB-COLLECTION ---
+      match /orders/{orderId} {
+        allow read, write: if true;
+
+        // --- ORDER PROGRESS LOG SUB-COLLECTION ---
+        match /progress/{progressId} {
+          allow read, write: if true;
+        }
+      }
+
+      // --- PAYMENTS SUB-COLLECTION ---
+      match /payments/{paymentId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
