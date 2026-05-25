@@ -12,7 +12,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const databaseId = firebaseConfig.firestoreDatabaseId || "ai-studio-244a6398-05b2-4037-852b-3044efa74e0f";
+const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
 const db = getFirestore(app, databaseId);
 const googleProvider = new GoogleAuthProvider();
 
