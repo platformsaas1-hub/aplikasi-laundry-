@@ -156,6 +156,14 @@ const INITIAL_USERS: UserProfile[] = [
     createdAt: new Date('2026-05-01').toISOString()
   },
   {
+    userId: 'admin_platform_uid01',
+    email: 'platformsaas1@gmail.com',
+    name: 'Platform Owner (Super Admin)',
+    role: 'super_admin',
+    isActive: true,
+    createdAt: new Date('2026-05-25').toISOString()
+  },
+  {
     userId: 'owner_sugiharti_uid01',
     email: 'owner@laundry.com',
     name: 'Hj. Sugiharti (Owner Laundry)',
@@ -594,51 +602,85 @@ export const laundryService = {
     if (userSnap.exists()) {
       console.log("Existing user profile found in Firestore:", userSnap.data());
       user = userSnap.data() as UserProfile;
+      
+      // Auto-migrate to super_admin if this is the platform administrator/developer email
+      const isSuperAdminEmail = (emailLower === 'aisugiharti12@admin.smp.belajar.id' || emailLower === 'platformsaas1@gmail.com');
+      if (isSuperAdminEmail && user.role !== 'super_admin') {
+        console.log("Migrating current owner session to platform super_admin role...");
+        user = {
+          ...user,
+          role: 'super_admin',
+          laundryId: undefined // super admins do not belong to a specific laundry
+        };
+        try {
+          await updateDoc(userDocRef, { role: 'super_admin', laundryId: null });
+        } catch (err) {
+          console.warn("Failed to write super_admin migration to firestore:", err);
+        }
+      }
     } else {
-      console.log("No user profile found, bootstrapping new owner profile...");
+      console.log("No user profile found, bootstrapping profile...");
+      const isSuperAdminEmail = (emailLower === 'aisugiharti12@admin.smp.belajar.id' || emailLower === 'platformsaas1@gmail.com');
+      
       const newLaundryId = `laundry_${Date.now()}`;
       
-      const newLaundry: Laundry = {
-        laundryId: newLaundryId,
-        name: 'Laundry Saya',
-        address: 'Alamat Laundry Belum Diisi',
-        phone: '08123456789',
-        ownerId: realUid,
-        isActive: true,
-        createdAt: new Date().toISOString()
-      };
+      if (isSuperAdminEmail) {
+        user = {
+          userId: realUid,
+          email: email,
+          name: firebaseUser.displayName || 'Platform Owner',
+          role: 'super_admin',
+          isActive: true,
+          createdAt: new Date().toISOString()
+        };
+        
+        try {
+          await setDoc(userDocRef, user);
+        } catch (bootstrapError) {
+          handleFirestoreError(bootstrapError, OperationType.CREATE, `bootstrap_admin_${realUid}`);
+        }
+      } else {
+        const newLaundry: Laundry = {
+          laundryId: newLaundryId,
+          name: 'Laundry Saya',
+          address: 'Alamat Laundry Belum Diisi',
+          phone: '08123456789',
+          ownerId: realUid,
+          isActive: true,
+          createdAt: new Date().toISOString()
+        };
 
-      const defaultService: LaundryService = {
-        serviceId: `srv_${Date.now()}_1`,
-        laundryId: newLaundryId,
-        name: 'Cuci Setrika Kiloan (Reguler 3 Hari)',
-        price: 6000,
-        unit: 'kg',
-        estimateDays: 3,
-        createdAt: new Date().toISOString()
-      };
+        const defaultService: LaundryService = {
+          serviceId: `srv_${Date.now()}_1`,
+          laundryId: newLaundryId,
+          name: 'Cuci Setrika Kiloan (Reguler 3 Hari)',
+          price: 6000,
+          unit: 'kg',
+          estimateDays: 3,
+          createdAt: new Date().toISOString()
+        };
 
-      user = {
-        userId: realUid,
-        email: email, // Keep exact casing from Google Auth token to match request.auth.token.email byte-for-byte
-        name: firebaseUser.displayName || email.split('@')[0],
-        role: emailLower === 'aisugiharti12@admin.smp.belajar.id' ? 'super_admin' : 'owner',
-        laundryId: newLaundryId,
-        isActive: true,
-        createdAt: new Date().toISOString()
-      };
+        user = {
+          userId: realUid,
+          email: email, // Keep exact casing from Google Auth token to match request.auth.token.email byte-for-byte
+          name: firebaseUser.displayName || email.split('@')[0],
+          role: 'owner',
+          laundryId: newLaundryId,
+          isActive: true,
+          createdAt: new Date().toISOString()
+        };
 
-      // Write to Firestore immediately with structured error capture
-      const userDoc = doc(libDb, 'users', realUid);
-      const laundryDoc = doc(libDb, 'laundries', newLaundryId);
-      const srvDoc = doc(libDb, 'laundries', newLaundryId, 'services', defaultService.serviceId);
+        // Write to Firestore immediately with structured error capture
+        const laundryDoc = doc(libDb, 'laundries', newLaundryId);
+        const srvDoc = doc(libDb, 'laundries', newLaundryId, 'services', defaultService.serviceId);
 
-      try {
-        await setDoc(userDoc, user);
-        await setDoc(laundryDoc, newLaundry);
-        await setDoc(srvDoc, defaultService);
-      } catch (bootstrapError) {
-        handleFirestoreError(bootstrapError, OperationType.CREATE, `bootstrap_user_${realUid}`);
+        try {
+          await setDoc(userDocRef, user);
+          await setDoc(laundryDoc, newLaundry);
+          await setDoc(srvDoc, defaultService);
+        } catch (bootstrapError) {
+          handleFirestoreError(bootstrapError, OperationType.CREATE, `bootstrap_user_${realUid}`);
+        }
       }
     }
 
@@ -675,12 +717,14 @@ export const laundryService = {
         createdAt: new Date().toISOString()
       };
 
+      const isSuperAdminEmail = (email === 'aisugiharti12@admin.smp.belajar.id' || email === 'platformsaas1@gmail.com');
+
       user = {
         userId: newOwnerId,
         email: email,
         name: email.split('@')[0],
-        role: email === 'aisugiharti12@admin.smp.belajar.id' ? 'super_admin' : 'owner',
-        laundryId: newLaundryId,
+        role: isSuperAdminEmail ? 'super_admin' : 'owner',
+        laundryId: isSuperAdminEmail ? undefined : newLaundryId,
         isActive: true,
         createdAt: new Date().toISOString()
       };

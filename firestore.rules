@@ -18,7 +18,7 @@ service cloud.firestore {
     // Helpers for checking admin based on hardcoded boot email or existing document
     function isSuperAdmin() {
       return isSignedIn() && 
-        (('email' in request.auth.token && (request.auth.token.email == 'aisugiharti12@admin.smp.belajar.id' || request.auth.token.email == 'AISUGIHARTI12@admin.smp.belajar.id')) || 
+        (('email' in request.auth.token && (request.auth.token.email == 'aisugiharti12@admin.smp.belajar.id' || request.auth.token.email == 'AISUGIHARTI12@admin.smp.belajar.id' || request.auth.token.email == 'platformsaas1@gmail.com' || request.auth.token.email == 'PLATFORMSAAS1@gmail.com')) || 
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getAuthUser().role == 'super_admin'));
     }
 

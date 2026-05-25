@@ -228,7 +228,7 @@ export default function App() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-blue-105">
       
       {/* FLOATING TOP DEVELOPMENT NOTIFICATION BAR */}
-      <div className="bg-slate-900 text-white py-2.5 px-4 text-center text-xs flex flex-wrap items-center justify-center gap-3 border-b border-slate-800">
+      <div className="bg-slate-900 text-white py-2.5 px-4 text-center text-xs flex flex-wrap items-center justify-center gap-3 border-b border-slate-800 no-print">
         <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-450 px-2 py-0.5 rounded border border-emerald-500/20 font-bold uppercase text-[9px] tracking-wider animate-pulse">
           <Activity className="w-3.5 h-3.5 text-emerald-450" /> Firebase Online Mode
         </span>
@@ -252,7 +252,7 @@ export default function App() {
       </div>
 
       {/* CORE FRAMEWORK NAVIGATION HEADER */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs backdrop-blur-md">
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs backdrop-blur-md no-print">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           
           {/* LOGO BRAND */}
@@ -378,7 +378,7 @@ export default function App() {
                 
                 <div className="space-y-4">
                   {[
-                    { role: 'Super Admin', task: 'Melihat statistik global & buat laundry pemilik baru.', user: 'Real Google Auth (aisugiharti12@admin.smp.belajar.id)' },
+                    { role: 'Super Admin', task: 'Melihat statistik global & buat laundry pemilik baru.', user: 'Real Google Auth (platformsaas1@gmail.com / admin)' },
                     { role: 'Owner Laundry / Admin', task: 'Mengatur harga jasa & daftarkan akun karyawan.', user: 'Real Google Auth (Gunakan Akun Google Anda)' },
                     { role: 'Kasir Laundry', task: 'Input laundry ditimbang, proses kasir & cetak struk thermal.', user: 'Login Internal (e.g. @kasirtest atau kasir001)' },
                     { role: 'Pegawai Cuci / Lapangan', task: 'Operator cuci-timbang yang update progres basah-kering.', user: 'Login Internal (e.g. @pegawaitest atau pegawai001)' }
@@ -607,10 +607,10 @@ export default function App() {
                       ✉️ Hubungi Dukungan:<br/>
                       Kirim surel keluhan resmi ke Super Admin platform di:<br/>
                       <a 
-                        href="mailto:aisugiharti12@admin.smp.belajar.id" 
+                        href="mailto:platformsaas1@gmail.com" 
                         className="underline text-blue-600 font-black hover:text-blue-700 select-all"
                       >
-                        aisugiharti12@admin.smp.belajar.id
+                        platformsaas1@gmail.com
                       </a>
                     </div>
 
@@ -647,7 +647,7 @@ export default function App() {
       </main>
 
       {/* COMPREHENSIVE PLATFORM FOOTER */}
-      <footer className="bg-white border-t border-slate-100 py-8 text-center text-xs text-slate-400 mt-12 bg-cover">
+      <footer className="bg-white border-t border-slate-100 py-8 text-center text-xs text-slate-400 mt-12 bg-cover no-print">
         <div className="max-w-7xl mx-auto px-4 space-y-3">
           <p className="font-semibold text-slate-550">Londria Hub &bull; Dikembangkan Menggunakan React + Tailwind CSS + Firebase</p>
           <p className="text-slate-400 max-w-md mx-auto leading-relaxed">

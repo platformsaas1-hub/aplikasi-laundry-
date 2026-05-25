@@ -11,3 +11,75 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ========================================================
+   MODERN THERMAL PRINT-ONLY / INVOICE PRINT STYLISTICS
+   ======================================================== */
+@media print {
+  /* Hide typical screen elements globally */
+  header,
+  footer,
+  nav,
+  button,
+  .no-print,
+  .print-hide,
+  iframe {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Reset layout structure for plain paper page */
+  body, html {
+    background-color: #ffffff !important;
+    background: none !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* If a print-area with ID exists, hide all page content on root except this section */
+  body:has(#print-area) #root * {
+    visibility: hidden !important;
+  }
+
+  body:has(#print-area) #print-area,
+  body:has(#print-area) #print-area * {
+    visibility: visible !important;
+  }
+
+  body:has(#print-area) #print-area {
+    position: absolute !important;
+    left: 50% !important;
+    top: 0 !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 80mm !important; /* Standarized width for cash register thermal receipt rolls */
+    margin: 0 auto !important;
+    padding: 15px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+
+  /* Convert overlay and popup fixed wrappers to standard static block tags so they do not overlap */
+  body:has(#print-area) .fixed.inset-0 {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    backdrop-filter: none !important;
+  }
+
+  body:has(#print-area) .bg-white.border.rounded-2xl {
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+}
