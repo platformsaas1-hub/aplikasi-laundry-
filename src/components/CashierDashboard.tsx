@@ -55,12 +55,17 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
   const [btCharacteristic, setBtCharacteristic] = React.useState<any>(null);
   const [isConnectingBt, setIsConnectingBt] = React.useState(false);
   const [isPrintingBt, setIsPrintingBt] = React.useState(false);
+  const [btStatus, setBtStatus] = React.useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
 
   // Connect to Bluetooth Thermal Printer
   const connectBluetoothPrinter = async () => {
+    setBtStatus(null);
     const nav = navigator as any;
     if (!nav.bluetooth) {
-      alert("Browser Anda belum mendukung Web Bluetooth API secara bawaan, atau Anda tidak membukanya melalui protokol HTTPS aman. Pastikan Anda membukanya melalui tautan langsung (tab baru)!");
+      setBtStatus({
+        type: 'error',
+        message: 'Browser Anda tidak mendukung Web Bluetooth API secara bawaan, atau Anda sedang membukanya di dalam frame sandbox Google AI Studio. Silakan buka aplikasi di TAB BARU (tautan langsung HTTPS)!'
+      });
       return;
     }
 
@@ -70,7 +75,7 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
       const device = await nav.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
-          '000018f0-0000-1000-8000-0085f9b34fb', // Generic Printing service
+          '000018f0-0000-1000-8000-00805f9b34fb', // Standardized 12-char suffix Generic Printing service
           '00001101-0000-1000-8000-00805f9b34fb', // Standard Serial port service
           'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Custom Chinese thermal write service
           '49535343-fe7d-4158-933e-1070f2020d56'  // ISSC SPP Service
@@ -114,15 +119,30 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
       if (foundChar) {
         setBtDevice(device);
         setBtCharacteristic(foundChar);
-        alert(`Berhasil Terhubung ke: ${device.name || "Printer Thermal Bluetooth"}!`);
+        setBtStatus({
+          type: 'success',
+          message: `Berhasil terhubung ke: ${device.name || "Printer Thermal Bluetooth"}!`
+        });
       } else {
         // If we still can't discover service due to browser security restrictions, offer to save device reference anyway
         setBtDevice(device);
-        alert(`Perangkat "${device.name || "Printer"}" terpilih. Beberapa browser membatasi pencarian GATT-Characteristic. Jika cetak gagal, harap gunakan fitur standard (Cetak Cetakan)!`);
+        setBtStatus({
+          type: 'info',
+          message: `Perangkat "${device.name || "Printer"}" terpilih. Beberapa browser membatasi pencarian GATT-Characteristic. Jika cetak gagal, harap gunakan fitur standard (Cetak Cetakan)!`
+        });
       }
     } catch (err: any) {
       console.error("Bluetooth pairing error:", err);
-      alert(`Koneksi Gagal: ${err.message || err}`);
+      let friendlyMessage = err.message || String(err);
+      if (friendlyMessage.includes("User cancelled")) {
+        friendlyMessage = "Koneksi dibatalkan oleh pengguna.";
+      } else if (friendlyMessage.includes("Iframe") || friendlyMessage.includes("SecurityError") || friendlyMessage.includes("requestDevice")) {
+        friendlyMessage = "Akses bluetooth diblokir di dalam sandbox Iframe Google AI Studio. Silakan jalankan aplikasi di TAB BARU (Tautan HTTPS langsung) agar browser mengaktifkan menu Bluetooth fisik Anda.";
+      }
+      setBtStatus({
+        type: 'error',
+        message: `Koneksi Gagal: ${friendlyMessage}`
+      });
     } finally {
       setIsConnectingBt(false);
     }
@@ -130,18 +150,26 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
 
   // Disconnect Bluetooth
   const disconnectBluetooth = () => {
+    setBtStatus(null);
     if (btDevice && btDevice.gatt?.connected) {
       btDevice.gatt.disconnect();
     }
     setBtDevice(null);
     setBtCharacteristic(null);
-    alert("Koneksi Printer Bluetooth diputuskan.");
+    setBtStatus({
+      type: 'info',
+      message: "Koneksi Printer Bluetooth diputuskan."
+    });
   };
 
   // Custom ESC/POS binary formatter & wireless transmitter over Bluetooth BLE
   const printBtInvoiceESC_POS = async (order: LaundryOrder) => {
+    setBtStatus(null);
     if (!btDevice) {
-      alert("Silakan hubungkan Printer Bluetooth Anda terlebih dahulu melalui tombol Hubungkan!");
+      setBtStatus({
+        type: 'error',
+        message: "Silakan hubungkan Printer Bluetooth Anda terlebih dahulu melalui tombol Hubungkan!"
+      });
       return;
     }
 
@@ -231,15 +259,24 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
             await new Promise(r => setTimeout(r, 20)); // Keep printer buffer secure
           }
         }
-        alert("Pencetakan mandiri langsung via Bluetooth berhasil dikirim!");
+        setBtStatus({
+          type: 'success',
+          message: "Pencetakan berhasil dikirim ke printer Bluetooth!"
+        });
       } else {
         // If GATT exploration failed on this mobile browser but device linked, fallback to virtual simulate printing
         // This acts as a robust helper alert explaining physical Bluetooth channel limits
-        alert(`Koneksi fisik ke Bluetooth berhasil dikoneksikan ke "${btDevice.name || "Printer"}". Namun browser tidak memberi izin akses karakteristik GATT-raw data. Mohon gunakan print standard dengan browser tab baru!`);
+        setBtStatus({
+          type: 'info',
+          message: `Koneksi fisik ke Bluetooth tersambung ke "${btDevice.name || "Printer"}". Namun browser membatasi izin akses karakteristik GATT-raw data. Mohon jalankan aplikasi di tab baru agar browser memberi akses Bluetooth fisik, atau gunakan Cetak Cetakan!`
+        });
       }
     } catch (err: any) {
       console.error("Bluetooth transmission error:", err);
-      alert(`Pencetakan Gagal: ${err.message || err}. Tip: Pastikan printer bluetooth dinyalakan dan dalam mode pairing.`);
+      setBtStatus({
+        type: 'error',
+        message: `Pencetakan Gagal: ${err.message || err}. Tip: Pastikan printer dinyalakan, dalam mode pairing, dan jalankan aplikasi di tab baru!`
+      });
     } finally {
       setIsPrintingBt(false);
     }
@@ -728,14 +765,36 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
                 ) : null}
               </div>
 
+              {/* Helpful warning about sandbox browser restrictions */}
+              {!btDevice && (
+                <div className="bg-blue-550/5 p-2 rounded-lg border border-blue-100 text-[10px] text-blue-700 leading-relaxed text-left">
+                  <span className="font-bold">💡 Petunjuk Sandbox:</span> Google Chrome melarang akses Bluetooth fisik jika dibuka di dalam frame kecil/sandbox Google AI Studio. Agar modul bluetooth aktif, silakan klik tombol <strong>"Buka di Tab Baru"</strong> di kanan atas browser Anda!
+                </div>
+              )}
+
+              {btStatus && (
+                <div className={`p-2.5 rounded-lg text-[10.5px] break-words text-left leading-relaxed ${
+                  btStatus.type === 'success' 
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                    : btStatus.type === 'error'
+                    ? 'bg-red-50 text-red-800 border border-red-200'
+                    : 'bg-blue-550/5 text-blue-800 border border-blue-200'
+                }`}>
+                  <div className="font-bold mb-0.5 flex items-center gap-1">
+                    {btStatus.type === 'success' ? '✓ Hubungan Berhasil' : btStatus.type === 'error' ? '⚠ Informasi Koneksi' : 'ℹ Info'}
+                  </div>
+                  {btStatus.message}
+                </div>
+              )}
+
               {btDevice ? (
                 <div className="space-y-2">
                   <p className="text-[10px] text-slate-500 font-mono bg-white p-1.5 border border-slate-200 rounded">
                     Terhubung: <strong className="text-slate-800">{btDevice.name || "Perangkat Bluetooth"}</strong>
                   </p>
                   <button
-                    disabled={isPrintingBt}
-                    onClick={() => printBtInvoiceESC_POS(viewInvoiceOrder)}
+                    disabled={isPrintingBt || !viewInvoiceOrder}
+                    onClick={() => viewInvoiceOrder && printBtInvoiceESC_POS(viewInvoiceOrder)}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-350 text-white font-bold py-2 px-3 rounded-lg transition text-xs flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     {isPrintingBt ? (
