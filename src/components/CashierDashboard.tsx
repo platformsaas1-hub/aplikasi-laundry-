@@ -734,7 +734,7 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
                 </p>
                 <div className="mt-2.5 p-2.5 bg-white border border-slate-105 rounded-xl shadow-xs flex items-center justify-center">
                   <QRCode 
-                    value={`https://app-laundry-one.vercel.app/tracking/${viewInvoiceOrder.invoiceNo}`}
+                    value={`${window.location.origin}/tracking/${viewInvoiceOrder.invoiceNo}`}
                     size={84}
                     level="H"
                   />
