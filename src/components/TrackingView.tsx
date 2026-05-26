@@ -29,13 +29,23 @@ export default function TrackingView() {
   const [errorMsg, setErrorMsg] = React.useState('');
   const [showQrSim, setShowQrSim] = React.useState(false);
 
-  // Check URL query parameters for automatic tracking (e.g., ?invoice=INV-2026-0001)
+  // Check URL query parameters or localStorage for automatic tracking (e.g., from Vercel dynamic path rewrite)
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const invoiceQuery = params.get('invoice') || params.get('tracking');
     if (invoiceQuery) {
       setSearchVal(invoiceQuery);
       handleTrack(invoiceQuery);
+    } else {
+      // Fallback check for direct routed parameters stored by App.tsx
+      const storedInvoice = localStorage.getItem('lnd_direct_track_invoice');
+      if (storedInvoice) {
+        const cleanInv = storedInvoice.trim();
+        setSearchVal(cleanInv);
+        handleTrack(cleanInv);
+        // Clean up from storage immediately so subsequent manual tracking isn't locked to it
+        localStorage.removeItem('lnd_direct_track_invoice');
+      }
     }
   }, []);
 
