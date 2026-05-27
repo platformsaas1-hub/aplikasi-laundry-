@@ -822,8 +822,8 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
           THERMAL RECEIPT OVERLAY MODAL (PRINT STYLES)
           ===================================== */}
       {viewInvoiceOrder && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl p-6 max-w-sm w-full font-serif shadow-2xl relative">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 overflow-y-auto flex items-start justify-center p-4">
+          <div className="bg-white border rounded-2xl p-6 max-w-sm w-full font-serif shadow-2xl relative my-auto">
             <button 
               onClick={() => setViewInvoiceOrder(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 bg-slate-100 hover:bg-slate-200 rounded-full"
