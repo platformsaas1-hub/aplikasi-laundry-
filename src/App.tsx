@@ -113,7 +113,7 @@ export default function App() {
       return { 
         suspended: true, 
         name: currentUser.name, 
-        reason: 'Akun personal Anda telah dinonaktifkan sementara oleh Super Administrator platform Londria Hub.' 
+        reason: 'Akun personal Anda telah dinonaktifkan sementara oleh Super Administrator platform LaundryKu.' 
       };
     }
 
@@ -264,7 +264,7 @@ export default function App() {
               <Building className="w-5 h-5" />
             </div>
             <div>
-              <span className="font-extrabold text-lg text-slate-800 font-sans tracking-tight">Londria <span className="text-blue-600">Hub</span></span>
+              <span className="font-extrabold text-lg text-slate-800 font-sans tracking-tight">Laundry<span className="text-blue-600">Ku</span></span>
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Smart Laundry</p>
             </div>
           </div>
@@ -649,7 +649,7 @@ export default function App() {
       {/* COMPREHENSIVE PLATFORM FOOTER */}
       <footer className="bg-white border-t border-slate-100 py-8 text-center text-xs text-slate-400 mt-12 bg-cover no-print">
         <div className="max-w-7xl mx-auto px-4 space-y-3">
-          <p className="font-semibold text-slate-550">Londria Hub &bull; Dikembangkan Menggunakan React + Tailwind CSS + Firebase</p>
+          <p className="font-semibold text-slate-550">LaundryKu &bull; Dikembangkan Menggunakan React + Tailwind CSS + Firebase</p>
           <p className="text-slate-400 max-w-md mx-auto leading-relaxed">
             Sistem ERP laundry handal siap deployment dengan proteksi andal, koder bersih, dan optimalisasi mobile-first. No WhatsApp Automation, No Fonte, Full Firebase.
           </p>
