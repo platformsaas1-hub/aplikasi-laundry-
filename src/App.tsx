@@ -105,32 +105,40 @@ export default function App() {
 
   // Compute active laundry & user suspension status dynamically
   const suspensionStatus = React.useMemo(() => {
-    if (!currentUser) return { suspended: false, name: '', reason: '' };
-    if (currentUser.role === 'super_admin') return { suspended: false, name: '', reason: '' };
+    if (!currentUser) return { suspended: false, isPendingApproval: false, name: '', reason: '' };
+    if (currentUser.role === 'super_admin') return { suspended: false, isPendingApproval: false, name: '', reason: '' };
 
-    // Check if user account itself is suspended
+    // Check if user account itself is suspended or pending approval
     if (currentUser.isActive === false) {
+      const isNewUser = !currentUser.createdAt || (Date.now() - new Date(currentUser.createdAt).getTime() < 86400000 * 30);
       return { 
         suspended: true, 
+        isPendingApproval: isNewUser,
         name: currentUser.name, 
-        reason: 'Akun personal Anda telah dinonaktifkan sementara oleh Super Administrator platform LaundryKu.' 
+        reason: isNewUser
+          ? 'Pendaftaran akun Anda berhasil dibuat! Namun, saat ini status akun Anda masih berada dalam tahap moderasi (Pending Approval) oleh Super Administrator platform LaundryKu.'
+          : 'Akun personal Anda telah dinonaktifkan sementara oleh Super Administrator platform LaundryKu.' 
       };
     }
 
-    // Check if user's laundry outlet is suspended
+    // Check if user's laundry outlet is suspended or pending approval
     if (currentUser.laundryId) {
       const laundryList = laundryService.getLaundries();
       const myLaundry = laundryList.find(l => l.laundryId === currentUser.laundryId);
       if (myLaundry && !myLaundry.isActive) {
+        const isNewLaundry = myLaundry.name === 'Laundry Saya' || !myLaundry.createdAt || (Date.now() - new Date(myLaundry.createdAt).getTime() < 86400000 * 30);
         return { 
           suspended: true, 
+          isPendingApproval: isNewLaundry,
           name: myLaundry.name, 
-          reason: `Outlet laundry "${myLaundry.name}" telah ditangguhkan sementara oleh administrator platform Hub Laundry.` 
+          reason: isNewLaundry
+            ? `Pendaftaran outlet "${myLaundry.name}" Anda berhasil terkirim dan saat ini berstatus Pending. Silakan tunggu atau hubungi admin platform LaundryKu untuk menyetujui (approve) outlet Anda.`
+            : `Outlet laundry "${myLaundry.name}" sedang ditangguhkan/suspended sementara oleh Super Administrator platform LaundryKu.` 
         };
       }
     }
 
-    return { suspended: false, name: '', reason: '' };
+    return { suspended: false, isPendingApproval: false, name: '', reason: '' };
   }, [currentUser, listVersion]);
 
   React.useEffect(() => {
@@ -569,39 +577,81 @@ export default function App() {
 
                 {/* Dashboard Router switch with secure suspension safety lock */}
                 {suspensionStatus.suspended ? (
-                  <div className="bg-white border-2 border-rose-100 rounded-3xl p-8 shadow-md flex flex-col items-center text-center space-y-6 max-w-lg mx-auto my-6 animate-fade-in">
-                    <div className="bg-rose-50 text-rose-600 p-4 rounded-full border border-rose-200">
-                      <ShieldAlert className="w-12 h-12" />
-                    </div>
-                    <div className="space-y-2">
-                      <span className="text-[10px] bg-rose-100 text-rose-800 px-3 py-1 rounded-full uppercase font-black tracking-widest border border-rose-200">
-                        Akses Ditangguhkan / Suspended
-                      </span>
-                      <h3 className="text-xl font-black text-slate-800 font-sans tracking-tight">
-                        {suspensionStatus.name} Nonaktif
-                      </h3>
-                      <p className="text-sm text-slate-550 leading-relaxed max-w-md pt-2">
-                        {suspensionStatus.reason}
-                      </p>
-                    </div>
+                  <div className="bg-white border-2 border-slate-100 rounded-3xl p-8 shadow-md flex flex-col items-center text-center space-y-6 max-w-lg mx-auto my-6 animate-fade-in">
+                    {suspensionStatus.isPendingApproval ? (
+                      <>
+                        <div className="bg-amber-50 text-amber-600 p-4 rounded-full border border-amber-200 relative">
+                          <span className="absolute top-1 right-1 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                          </span>
+                          <Building className="w-12 h-12" />
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-[10px] bg-amber-100 text-amber-855 px-3 py-1 rounded-full uppercase font-black tracking-widest border border-amber-200">
+                            Menunggu Approval Super Admin
+                          </span>
+                          <h3 className="text-xl font-black text-slate-800 font-sans tracking-tight">
+                            Pendaftaran Mitra Sedang Dimoderasi
+                          </h3>
+                          <p className="text-xs text-slate-500 leading-relaxed max-w-md pt-1.5">
+                            {suspensionStatus.reason}
+                          </p>
+                        </div>
 
-                    <div className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-left space-y-3">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dampak Penonaktifan:</p>
-                      <ul className="text-xs text-slate-650 space-y-2">
-                        <li className="flex items-start gap-2">
-                          <span className="text-rose-500 font-bold">&bull;</span>
-                          <span>Seluruh pencatatan transaksi kasir, input pakaian masuk, dan timbangan laundry dihentikan sementara.</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className="text-rose-500 font-bold">&bull;</span>
-                          <span>Halaman kelola staff, pengaturan bonus, dan edit layanan outlet dikunci total.</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className="text-rose-500 font-bold">&bull;</span>
-                          <span>Pelacakan nota invoice bagi pelanggan tetap dapat diakses dengan catatan produksi dibekukan.</span>
-                        </li>
-                      </ul>
-                    </div>
+                        <div className="w-full bg-indigo-50/55 border border-indigo-100 p-5 rounded-2xl text-left space-y-3 pb-6 border-dashed">
+                          <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest flex items-center gap-1">
+                            🚀 Langkah Selanjutnya (Onboarding):
+                          </p>
+                          <ol className="text-xs text-slate-650 space-y-2.5 list-decimal list-inside font-medium leading-relaxed">
+                            <li>
+                              <strong className="text-indigo-950">Peninjauan Akun</strong>: Super Admin meninjau email dan detail pendaftaran outlet demi keamanan platform.
+                            </li>
+                            <li>
+                              <strong className="text-indigo-950">Aktivasi Outlet Utama</strong>: Setelah diverifikasi, Anda dapat mengakses menu lengkap dan mengganti nama "Laundry Saya".
+                            </li>
+                            <li>
+                              <strong className="text-indigo-950 font-bold">Siap Bekerja</strong>: Daftarkan harga timbangan, rincian pakaian, serta cetak struk untuk pelanggan pertama Anda.
+                            </li>
+                          </ol>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-rose-50 text-rose-600 p-4 rounded-full border border-rose-200">
+                          <ShieldAlert className="w-12 h-12" />
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-[10px] bg-rose-100 text-rose-800 px-3 py-1 rounded-full uppercase font-black tracking-widest border border-rose-200">
+                            Akses Ditangguhkan / Suspended
+                          </span>
+                          <h3 className="text-xl font-black text-slate-800 font-sans tracking-tight">
+                            {suspensionStatus.name} Nonaktif
+                          </h3>
+                          <p className="text-sm text-slate-550 leading-relaxed max-w-md pt-2">
+                            {suspensionStatus.reason}
+                          </p>
+                        </div>
+
+                        <div className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl text-left space-y-3">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Dampak Penonaktifan:</p>
+                          <ul className="text-xs text-slate-650 space-y-2">
+                            <li className="flex items-start gap-2">
+                              <span className="text-rose-500 font-bold">&bull;</span>
+                              <span>Seluruh pencatatan transaksi kasir, input pakaian masuk, dan timbangan laundry dihentikan sementara.</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-rose-550 font-bold">&bull;</span>
+                              <span>Halaman kelola staff, pengaturan bonus, dan edit layanan outlet dikunci total.</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-rose-500 font-bold">&bull;</span>
+                              <span>Pelacakan nota invoice bagi pelanggan tetap dapat diakses dengan catatan produksi dibekukan.</span>
+                            </li>
+                          </ul>
+                        </div>
+                      </>
+                    )}
 
                     <div className="p-3 bg-blue-50/55 text-blue-805 border border-blue-100 rounded-xl text-xs font-semibold leading-relaxed w-full">
                       ✉️ Hubungi Dukungan:<br/>

@@ -80,36 +80,36 @@ service cloud.firestore {
     match /laundries/{laundryId} {
       // Allow full access to support both Google Authenticated owners and unauthenticated internal employee/cashier roles
       allow read, write: if true;
+    }
 
-      // --- SERVICES SUB-COLLECTION ---
-      match /services/{serviceId} {
-        allow read, write: if true;
-      }
+    // --- SERVICES SUB-COLLECTION ---
+    match /laundries/{laundryId}/services/{serviceId} {
+      allow read, write: if true;
+    }
 
-      // --- CUSTOMERS SUB-COLLECTION ---
-      match /customers/{customerId} {
-        allow read, write: if true;
-      }
+    // --- CUSTOMERS SUB-COLLECTION ---
+    match /laundries/{laundryId}/customers/{customerId} {
+      allow read, write: if true;
+    }
 
-      // --- ORDERS SUB-COLLECTION ---
-      match /orders/{orderId} {
-        allow read, write: if true;
+    // --- ORDERS SUB-COLLECTION ---
+    match /laundries/{laundryId}/orders/{orderId} {
+      allow read, write: if true;
+    }
 
-        // --- ORDER PROGRESS LOG SUB-COLLECTION ---
-        match /progress/{progressId} {
-          allow read, write: if true;
-        }
-      }
+    // --- ORDER PROGRESS LOG SUB-COLLECTION ---
+    match /laundries/{laundryId}/orders/{orderId}/progress/{progressId} {
+      allow read, write: if true;
+    }
 
-      // --- PAYMENTS SUB-COLLECTION ---
-      match /payments/{paymentId} {
-        allow read, write: if true;
-      }
+    // --- PAYMENTS SUB-COLLECTION ---
+    match /laundries/{laundryId}/payments/{paymentId} {
+      allow read, write: if true;
+    }
 
-      // --- EXPENSES SUB-COLLECTION ---
-      match /expenses/{expenseId} {
-        allow read, write: if true;
-      }
+    // --- EXPENSES SUB-COLLECTION ---
+    match /laundries/{laundryId}/expenses/{expenseId} {
+      allow read, write: if true;
     }
   }
 }

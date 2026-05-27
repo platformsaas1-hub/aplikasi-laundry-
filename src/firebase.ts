@@ -599,6 +599,10 @@ export const laundryService = {
     return logged ? JSON.parse(logged) : null;
   },
 
+  getAllUsers: (): UserProfile[] => {
+    return getUsersLocal();
+  },
+
   setSimulatedUser: (user: UserProfile | null) => {
     if (user) {
       localStorage.setItem('lnd_current_user', JSON.stringify(user));
@@ -683,7 +687,7 @@ export const laundryService = {
           address: 'Alamat Laundry Belum Diisi',
           phone: '08123456789',
           ownerId: realUid,
-          isActive: true,
+          isActive: false, // Pending Super Admin approval by default
           createdAt: new Date().toISOString()
         };
 
@@ -703,7 +707,7 @@ export const laundryService = {
           name: firebaseUser.displayName || email.split('@')[0],
           role: 'owner',
           laundryId: newLaundryId,
-          isActive: true,
+          isActive: false, // Pending Super Admin approval by default
           createdAt: new Date().toISOString()
         };
 
@@ -734,13 +738,15 @@ export const laundryService = {
       const newOwnerId = `owner_${Date.now()}`;
       const newLaundryId = `laundry_${Date.now()}`;
       
+      const isSuperAdminEmail = (email === 'aisugiharti12@admin.smp.belajar.id' || email === 'platformsaas1@gmail.com');
+
       const newLaundry: Laundry = {
         laundryId: newLaundryId,
         name: 'Laundry Saya',
         address: 'Alamat Laundry Belum Diisi',
         phone: '08123456789',
         ownerId: newOwnerId,
-        isActive: true,
+        isActive: isSuperAdminEmail ? true : false, // Pending approval for normal users
         createdAt: new Date().toISOString()
       };
 
@@ -754,15 +760,13 @@ export const laundryService = {
         createdAt: new Date().toISOString()
       };
 
-      const isSuperAdminEmail = (email === 'aisugiharti12@admin.smp.belajar.id' || email === 'platformsaas1@gmail.com');
-
       user = {
         userId: newOwnerId,
         email: email,
         name: email.split('@')[0],
         role: isSuperAdminEmail ? 'super_admin' : 'owner',
         laundryId: isSuperAdminEmail ? undefined : newLaundryId,
-        isActive: true,
+        isActive: isSuperAdminEmail ? true : false, // Pending approval for normal users
         createdAt: new Date().toISOString()
       };
 
@@ -827,10 +831,27 @@ export const laundryService = {
     cache_laundries = cached;
     localStorage.setItem('lnd_laundries', JSON.stringify(cached));
 
+    // Also update associated users in the cache
+    cache_users = cache_users.map(u => {
+      if (u.laundryId === laundryId) {
+        return { ...u, isActive };
+      }
+      return u;
+    });
+    localStorage.setItem('lnd_users', JSON.stringify(cache_users));
+
     if (useRealFirebase) {
       try {
         const laundryDoc = doc(libDb, 'laundries', laundryId);
         await updateDoc(laundryDoc, { isActive });
+
+        // Update all users belonging to this laundry in Firestore
+        const usersRef = collection(libDb, 'users');
+        const q = query(usersRef, where('laundryId', '==', laundryId));
+        const usersSnap = await getDocs(q);
+        for (const uDoc of usersSnap.docs) {
+          await updateDoc(doc(libDb, 'users', uDoc.id), { isActive });
+        }
       } catch (e) {
         handleFirestoreError(e, OperationType.UPDATE, `laundries/${laundryId}`);
         throw e;
@@ -855,6 +876,35 @@ export const laundryService = {
         await updateDoc(laundryDoc, { name, address, phone });
       } catch (e) {
         handleFirestoreError(e, OperationType.UPDATE, `laundries/${laundryId}`);
+        throw e;
+      }
+    }
+    notifyStateChange();
+  },
+
+  deleteLaundry: async (laundryId: string): Promise<void> => {
+    // 1. Remove from cache
+    cache_laundries = cache_laundries.filter(lnd => lnd.laundryId !== laundryId);
+    localStorage.setItem('lnd_laundries', JSON.stringify(cache_laundries));
+
+    // 2. Remove associated users from cache
+    cache_users = cache_users.filter(u => u.laundryId !== laundryId);
+    localStorage.setItem('lnd_users', JSON.stringify(cache_users));
+
+    if (useRealFirebase) {
+      try {
+        const laundryDoc = doc(libDb, 'laundries', laundryId);
+        await deleteDoc(laundryDoc);
+
+        // Delete users belonging to this laundry
+        const usersRef = collection(libDb, 'users');
+        const q = query(usersRef, where('laundryId', '==', laundryId));
+        const usersSnap = await getDocs(q);
+        for (const uDoc of usersSnap.docs) {
+          await deleteDoc(doc(libDb, 'users', uDoc.id));
+        }
+      } catch (e) {
+        handleFirestoreError(e, OperationType.DELETE, `laundries/${laundryId}`);
         throw e;
       }
     }
