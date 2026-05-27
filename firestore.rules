@@ -86,6 +86,11 @@ service cloud.firestore {
         allow read, write: if true;
       }
 
+      // --- CUSTOMERS SUB-COLLECTION ---
+      match /customers/{customerId} {
+        allow read, write: if true;
+      }
+
       // --- ORDERS SUB-COLLECTION ---
       match /orders/{orderId} {
         allow read, write: if true;

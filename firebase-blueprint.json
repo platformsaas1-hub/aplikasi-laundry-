@@ -116,6 +116,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["expenseId", "laundryId", "category", "title", "amount", "date", "createdAt"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Represents customers in the laundry member database, supporting pricing rules and discounts",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "laundryId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "memberType": { "type": "string", "enum": ["regular", "member"] },
+        "discountPercent": { "type": "integer" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "laundryId", "name", "phone", "memberType", "discountPercent", "createdAt"]
     }
   },
   "firestore": {
@@ -126,6 +142,10 @@
     "/laundries/{laundryId}": {
       "schema": "Laundry",
       "description": "Laundry business documents"
+    },
+    "/laundries/{laundryId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Subcollection of customers/members per laundry"
     },
     "/laundries/{laundryId}/services/{serviceId}": {
       "schema": "Service",

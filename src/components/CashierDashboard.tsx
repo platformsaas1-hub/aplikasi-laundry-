@@ -18,10 +18,11 @@ import {
   Phone, 
   Layers, 
   ArrowLeft,
-  X 
+  X,
+  Users
 } from 'lucide-react';
 import { laundryService } from '../firebase';
-import { Laundry, LaundryOrder, LaundryService as ServiceModel, PaymentStatus } from '../types';
+import { Laundry, LaundryOrder, LaundryService as ServiceModel, PaymentStatus, Customer } from '../types';
 import QRCode from 'react-qr-code';
 
 interface CashierDashboardProps {
@@ -44,6 +45,11 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
   const [notes, setNotes] = React.useState('');
   const [initialPaymentStatus, setInitialPaymentStatus] = React.useState<PaymentStatus>('unpaid');
   const [formSuccess, setFormSuccess] = React.useState<LaundryOrder | null>(null);
+
+  // New Customer selection Database states
+  const [customers, setCustomers] = React.useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = React.useState<string>('');
+  const [selectedCustomer, setSelectedCustomer] = React.useState<Customer | null>(null);
 
   // Active Selected Invoice Overlay State
   const [viewInvoiceOrder, setViewInvoiceOrder] = React.useState<LaundryOrder | null>(null);
@@ -216,10 +222,19 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
       linesPayload.push(encoder.encode(`${order.serviceName.substring(0, 32)}\n`));
       
       const detailsRow = `${order.weight} ${order.unit} x Rp ${order.servicePrice.toLocaleString('id-ID')}`;
-      const totalRow = `Rp ${order.totalPrice.toLocaleString('id-ID')}`;
+      const totalRow = `Rp ${(order.originalPrice || order.totalPrice).toLocaleString('id-ID')}`;
       const spacesNeeded = Math.max(1, 32 - detailsRow.length - totalRow.length);
       const printRowStr = detailsRow + " ".repeat(spacesNeeded) + totalRow + "\n";
       linesPayload.push(encoder.encode(printRowStr));
+
+      if (order.discountPercent && order.discountPercent > 0) {
+        // Print discount row on thermal printer
+        const discTitle = `Diskon Member (${order.discountPercent}%):`;
+        const discValue = `-Rp ${Math.round(((order.originalPrice || order.totalPrice) * order.discountPercent) / 100).toLocaleString('id-ID')}`;
+        const sNeededDisc = Math.max(1, 32 - discTitle.length - discValue.length);
+        linesPayload.push(encoder.encode(discTitle + " ".repeat(sNeededDisc) + discValue + "\n"));
+      }
+
       linesPayload.push(encoder.encode("================================\n"));
 
       // 5. Grand totals with Bold structure
@@ -285,6 +300,7 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
   const loadData = () => {
     setServices(laundryService.getServices(currentLaundryId));
     setOrders(laundryService.getOrders(currentLaundryId));
+    setCustomers(laundryService.getCustomers(currentLaundryId));
     
     const laundries = laundryService.getLaundries();
     const lnd = laundries.find(item => item.laundryId === currentLaundryId);
@@ -312,13 +328,34 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
     const selectedService = services.find(s => s.serviceId === selectedServiceId);
     if (!selectedService) return;
 
-    // Calculation
-    const totalPrice = Math.round(selectedService.price * weight);
+    // Calculation with Member Database details
+    const originalPrice = Math.round(selectedService.price * weight);
+    let discountPercent = 0;
+
+    if (selectedCustomerId) {
+      const matchCust = customers.find(c => c.customerId === selectedCustomerId);
+      if (matchCust && matchCust.memberType === 'member') {
+        discountPercent = matchCust.discountPercent || 0;
+      }
+    } else {
+      // Fallback search by Phone
+      const matchCust = customers.find(c => c.phone.trim() === customerPhone.trim() && c.memberType === 'member');
+      if (matchCust) {
+        discountPercent = matchCust.discountPercent || 0;
+      }
+    }
+
+    const discountAmount = Math.round((originalPrice * discountPercent) / 100);
+    const totalPrice = originalPrice - discountAmount;
+
     const estimatedCompletion = new Date();
     estimatedCompletion.setDate(estimatedCompletion.getDate() + selectedService.estimateDays);
 
     const created = laundryService.createOrder({
       laundryId: currentLaundryId,
+      customerId: selectedCustomerId || undefined,
+      discountPercent,
+      originalPrice,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       weight: Number(weight),
@@ -343,6 +380,8 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
     setWeight(1);
     setNotes('');
     setInitialPaymentStatus('unpaid');
+    setSelectedCustomerId('');
+    setSelectedCustomer(null);
 
     loadData();
   };
@@ -542,6 +581,78 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
 
               <form onSubmit={handleCreateOrder} className="space-y-4">
                 
+                {/* DATABASE MEMBER QUICK LOOKUP */}
+                {customers.length > 0 && (
+                  <div className="bg-indigo-50/60 border border-indigo-105 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-indigo-700 tracking-wider flex items-center gap-1.5 flex-row">
+                        <Users className="w-4 h-4 text-indigo-500" />
+                        Pencarian Member Terdaftar
+                      </span>
+                      {selectedCustomerId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomerId('');
+                            setSelectedCustomer(null);
+                            setCustomerName('');
+                            setCustomerPhone('');
+                          }}
+                          className="text-rose-600 hover:text-rose-800 text-[11px] font-bold cursor-pointer"
+                        >
+                          Reset Pilihan
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                      <div>
+                        <select
+                          value={selectedCustomerId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedCustomerId(val);
+                            if (val === '') {
+                              setSelectedCustomer(null);
+                            } else {
+                              const matched = customers.find(c => c.customerId === val);
+                              if (matched) {
+                                setSelectedCustomer(matched);
+                                setCustomerName(matched.name);
+                                setCustomerPhone(matched.phone);
+                              }
+                            }
+                          }}
+                          className="w-full bg-white border border-indigo-200 text-xs font-bold rounded-xl px-3 py-2.5 text-indigo-805 text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">-- Pilih dari database member --</option>
+                          {customers.map(c => (
+                            <option key={c.customerId} value={c.customerId}>
+                              {c.name} ({c.phone}) - {c.memberType === 'member' ? `Member (${c.discountPercent}%)` : 'Biasa'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedCustomer && (
+                        <div className="text-xs p-2 bg-white border border-indigo-100 rounded-xl text-indigo-900 leading-snug">
+                          {selectedCustomer.memberType === 'member' ? (
+                            <p className="font-bold text-emerald-700 flex items-center gap-1">
+                              <span className="inline-block w-2-h-2 relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              </span>
+                              Tipe: Member (Potongan {selectedCustomer.discountPercent}% Aktif!)
+                            </p>
+                          ) : (
+                            <p className="font-bold text-slate-500">
+                              Tipe: Pelanggan Biasa (Tanpa Diskon)
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* PELANGGAN COLUMN */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -648,6 +759,52 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
                   </div>
                 </div>
 
+                {/* REAL-TIME CALCULATION PREVIEW */}
+                {(() => {
+                  const selectedSvc = services.find(s => s.serviceId === selectedServiceId);
+                  if (!selectedSvc) return null;
+
+                  const originalTotal = Math.round(selectedSvc.price * weight);
+                  let discPercent = 0;
+                  if (selectedCustomerId) {
+                    const matchCust = customers.find(c => c.customerId === selectedCustomerId);
+                    if (matchCust && matchCust.memberType === 'member') {
+                      discPercent = matchCust.discountPercent || 0;
+                    }
+                  } else if (customerPhone.trim()) {
+                    const matchCust = customers.find(c => c.phone.trim() === customerPhone.trim() && c.memberType === 'member');
+                    if (matchCust) {
+                      discPercent = matchCust.discountPercent || 0;
+                    }
+                  }
+
+                  const discountAmount = Math.round((originalTotal * discPercent) / 100);
+                  const finalTotal = originalTotal - discountAmount;
+
+                  return (
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 no-print">
+                      <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1.5 flex justify-between">
+                        <span>Rincian Transaksi</span>
+                        {discPercent > 0 && <span className="text-emerald-650 font-black font-sans text-emerald-600">Member Diskon Aktif</span>}
+                      </h4>
+                      <div className="flex justify-between text-xs font-semibold text-slate-600">
+                        <span>Layanan ({weight} {selectedSvc.unit} x {formatRupiah(selectedSvc.price)}):</span>
+                        <span className="font-mono">{formatRupiah(originalTotal)}</span>
+                      </div>
+                      {discPercent > 0 && (
+                        <div className="flex justify-between text-xs font-bold text-emerald-600">
+                          <span>Diskon Member Terdaftar ({discPercent}%):</span>
+                          <span className="font-mono">-{formatRupiah(discountAmount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm font-black text-slate-800 pt-2 border-t border-dashed border-slate-200">
+                        <span>Total Tagihan:</span>
+                        <span className="text-blue-600 font-mono text-base">{formatRupiah(finalTotal)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <button 
                   type="submit"
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition text-sm shadow-sm flex items-center justify-center gap-2 mt-4"
@@ -712,14 +869,27 @@ export default function CashierDashboard({ currentLaundryId, cashierId }: Cashie
                 </div>
                 <div className="flex justify-between text-slate-700 font-semibold mt-0.5">
                   <span>{viewInvoiceOrder.weight} {viewInvoiceOrder.unit} x {formatRupiah(viewInvoiceOrder.servicePrice)}</span>
-                  <span>{formatRupiah(viewInvoiceOrder.totalPrice)}</span>
+                  <span>{formatRupiah(viewInvoiceOrder.originalPrice || viewInvoiceOrder.totalPrice)}</span>
                 </div>
+
+                {viewInvoiceOrder.discountPercent && viewInvoiceOrder.discountPercent > 0 ? (
+                  <div className="text-[10px] space-y-1 border-t border-dashed border-slate-200 pt-1.5 mt-1.5">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Harga Asli:</span>
+                      <span>{formatRupiah(viewInvoiceOrder.originalPrice || viewInvoiceOrder.totalPrice)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600 font-bold">
+                      <span>Diskon Member ({viewInvoiceOrder.discountPercent}%):</span>
+                      <span>-{formatRupiah((viewInvoiceOrder.originalPrice || viewInvoiceOrder.totalPrice) - viewInvoiceOrder.totalPrice)}</span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="w-full space-y-1.5 mb-4 font-mono text-[10px] text-right">
                 <div className="flex justify-between text-[11px] font-black border-b border-slate-250 pb-1.5">
-                  <span className="font-sans font-bold">TOTAL AKHIR:</span>
-                  <span>{formatRupiah(viewInvoiceOrder.totalPrice)}</span>
+                  <span className="font-sans font-bold text-slate-850 text-slate-800">TOTAL AKHIR:</span>
+                  <span className="text-blue-600 font-bold">{formatRupiah(viewInvoiceOrder.totalPrice)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Status Bayar:</span>

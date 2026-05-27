@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { laundryService } from '../firebase';
-import { Laundry, LaundryService as ServiceModel, UserProfile, LaundryOrder, LaundryExpense, ExpenseCategory } from '../types';
+import { Laundry, LaundryService as ServiceModel, UserProfile, LaundryOrder, LaundryExpense, ExpenseCategory, Customer } from '../types';
 import UserAvatar from './UserAvatar';
 
 interface OwnerDashboardProps {
@@ -34,7 +34,7 @@ interface OwnerDashboardProps {
 }
 
 export default function OwnerDashboard({ currentLaundryId }: OwnerDashboardProps) {
-  const [activeTab, setActiveTab] = React.useState<'summary' | 'services' | 'staff' | 'orders' | 'settings' | 'expenses'>('summary');
+  const [activeTab, setActiveTab] = React.useState<'summary' | 'services' | 'staff' | 'orders' | 'settings' | 'expenses' | 'customers'>('summary');
   
   // Data States
   const [laundry, setLaundry] = React.useState<Laundry | null>(null);
@@ -42,6 +42,18 @@ export default function OwnerDashboard({ currentLaundryId }: OwnerDashboardProps
   const [staff, setStaff] = React.useState<UserProfile[]>([]);
   const [orders, setOrders] = React.useState<LaundryOrder[]>([]);
   const [expenses, setExpenses] = React.useState<LaundryExpense[]>([]);
+  const [customers, setCustomers] = React.useState<Customer[]>([]);
+
+  // Customer Form States
+  const [custName, setCustName] = React.useState('');
+  const [custPhone, setCustPhone] = React.useState('');
+  const [custMemberType, setCustMemberType] = React.useState<'regular' | 'member'>('member');
+  const [custDiscount, setCustDiscount] = React.useState<number>(10);
+  const [custNotes, setCustNotes] = React.useState('');
+  const [custEditId, setCustEditId] = React.useState<string | null>(null);
+  const [custSuccess, setCustSuccess] = React.useState('');
+  const [custError, setCustError] = React.useState('');
+  const [custSearch, setCustSearch] = React.useState('');
 
   // Expense Form States
   const [expenseTitle, setExpenseTitle] = React.useState('');
@@ -160,6 +172,70 @@ export default function OwnerDashboard({ currentLaundryId }: OwnerDashboardProps
   const handleDeleteService = (serviceId: string) => {
     laundryService.deleteService(serviceId);
     loadAllData();
+  };
+
+  // Handle Customer Save (Create/Update)
+  const handleSaveCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCustError('');
+    setCustSuccess('');
+
+    if (!custName.trim() || !custPhone.trim()) {
+      setCustError('Nama pelanggan dan nomor handphone wajib diisi.');
+      return;
+    }
+
+    try {
+      if (custEditId) {
+        await laundryService.updateCustomer(custEditId, currentLaundryId, {
+          name: custName.trim(),
+          phone: custPhone.trim(),
+          memberType: custMemberType,
+          discountPercent: custMemberType === 'member' ? Number(custDiscount) : 0,
+          notes: custNotes.trim()
+        });
+        setCustSuccess('Pelanggan berhasil diperbarui.');
+      } else {
+        await laundryService.addCustomer({
+          laundryId: currentLaundryId,
+          name: custName.trim(),
+          phone: custPhone.trim(),
+          memberType: custMemberType,
+          discountPercent: custMemberType === 'member' ? Number(custDiscount) : 0,
+          notes: custNotes.trim()
+        });
+        setCustSuccess('Pelanggan baru berhasil didaftarkan ke Member Database.');
+      }
+
+      // Reset Form
+      setCustName('');
+      setCustPhone('');
+      setCustMemberType('member');
+      setCustDiscount(10);
+      setCustNotes('');
+      setCustEditId(null);
+      loadAllData();
+    } catch (err) {
+      setCustError('Gagal menyimpan data pelanggan.');
+    }
+  };
+
+  const handleEditCustomerClick = (customer: Customer) => {
+    setCustEditId(customer.customerId);
+    setCustName(customer.name);
+    setCustPhone(customer.phone);
+    setCustMemberType(customer.memberType);
+    setCustDiscount(customer.discountPercent || 10);
+    setCustNotes(customer.notes || '');
+    setCustError('');
+    setCustSuccess('');
+  };
+
+  const handleDeleteCustomer = async (customerId: string) => {
+    if (confirm('Apakah Anda yakin ingin menghapus pelanggan ini dari database?')) {
+      await laundryService.deleteCustomer(currentLaundryId, customerId);
+      loadAllData();
+    }
   };
 
   // Handle adding staff accounts (strictly enforce exactly 1 cashier maximum)
@@ -581,6 +657,17 @@ export default function OwnerDashboard({ currentLaundryId }: OwnerDashboardProps
         >
           <Wallet className="w-4 h-4" />
           Beban & Pengeluaran ({expenses.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('customers')}
+          className={`flex items-center gap-2 px-5 py-3 font-semibold text-sm transition-all flex-shrink-0 ${
+            activeTab === 'customers' 
+              ? 'border-b-2 border-blue-600 text-blue-600' 
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Users className="w-4 h-4 text-indigo-500" />
+          Database Pelanggan / Member ({customers.length})
         </button>
         <button 
           onClick={() => setActiveTab('settings')}
@@ -1272,6 +1359,254 @@ export default function OwnerDashboard({ currentLaundryId }: OwnerDashboardProps
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* CUSTOMERS / DATABASE MEMBER TAB */}
+      {activeTab === 'customers' && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          
+          {/* COLUMN 1: FORM INPUT PELANGGAN */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="border-b border-slate-100 pb-4">
+                <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-600" />
+                  {custEditId ? 'Edit Data Pelanggan' : 'Daftarkan Pelanggan Baru'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Atur tipe pelanggan agar dapat menerapkan diskon otomatis (misal: diskon member 10%) ketika kasir membuat transaksi laundrinya.
+                </p>
+              </div>
+
+              {custSuccess && (
+                <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl text-xs font-semibold">
+                  {custSuccess}
+                </div>
+              )}
+              {custError && (
+                <div className="p-3 bg-rose-50 text-rose-800 border border-rose-100 rounded-xl text-xs font-semibold">
+                  {custError}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveCustomer} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Nama Lengkap Pelanggan</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Ibu Rina Amalia"
+                    value={custName}
+                    onChange={(e) => setCustName(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Nomor Handphone (WhatsApp)</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: 08123456789"
+                    value={custPhone}
+                    onChange={(e) => setCustPhone(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Tipe Hubungan Pelanggan</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCustMemberType('member')}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                        custMemberType === 'member'
+                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-extrabold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Member Khusus (Diskon)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustMemberType('regular')}
+                      className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                        custMemberType === 'regular'
+                          ? 'bg-slate-100 border-slate-300 text-slate-700 font-extrabold'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Pelanggan Biasa
+                    </button>
+                  </div>
+                </div>
+
+                {custMemberType === 'member' && (
+                  <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-100/50 space-y-2">
+                    <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wide">Persentase Diskon Member (%)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="10"
+                        value={custDiscount}
+                        onChange={(e) => setCustDiscount(Number(e.target.value))}
+                        className="w-full bg-white border border-indigo-150 rounded-xl px-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-850 pr-10"
+                      />
+                      <span className="absolute right-4 top-2 text-sm font-bold text-indigo-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-indigo-500 leading-snug">
+                      Setiap kali kasir memilih pelanggan ini, sistem akan otomatis mengurangi harga total transaksi sebesar diskon ini.
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Catatan Tambahan (Opsional)</label>
+                  <textarea
+                    placeholder="Contoh: Langganan cuci karpet bulu, suka wangi parfum lavender extra."
+                    value={custNotes}
+                    onChange={(e) => setCustNotes(e.target.value)}
+                    rows={2}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  {custEditId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustEditId(null);
+                        setCustName('');
+                        setCustPhone('');
+                        setCustMemberType('member');
+                        setCustDiscount(10);
+                        setCustNotes('');
+                        setCustError('');
+                        setCustSuccess('');
+                      }}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs py-3 rounded-xl transition-all"
+                    >
+                      Batal
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="flex-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-3 rounded-xl shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {custEditId ? 'Simpan Perubahan' : 'Daftarkan Pelanggan'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* COLUMN 2: LIST TABLE OF CUSTOMERS (col-span-3) */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 mb-4 gap-3">
+                <div>
+                  <h3 className="font-extrabold text-slate-800 text-base">Semua Daftar Pelanggan</h3>
+                  <p className="text-xs text-slate-400 mt-1">Daftar pelanggan terdaftar di outlet Anda beserta tipe dan diskon.</p>
+                </div>
+                
+                {/* Search Input */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cari Nama / No HP..."
+                    value={custSearch}
+                    onChange={(e) => setCustSearch(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-xl pl-3 pr-10 py-2 w-full sm:w-48 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                  />
+                  <div className="absolute right-3 top-2.5 text-slate-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid/Table lists */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-[10px] font-extrabold text-slate-400 uppercase tracking-widest border-b border-slate-200/80">
+                      <th className="py-3 px-4">Nama Pelanggan</th>
+                      <th className="py-3 px-4">Info Kontak</th>
+                      <th className="py-3 px-4">Tipe Hubungan</th>
+                      <th className="py-3 px-4 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(() => {
+                      const filtered = customers.filter(c => {
+                        const term = custSearch.toLowerCase();
+                        return c.name.toLowerCase().includes(term) || c.phone.includes(term);
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={4} className="py-12 text-center text-slate-400 text-xs font-semibold">
+                              Tidak ada data pelanggan yang cocok dengan pencarian Anda.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map((c) => (
+                        <tr key={c.customerId} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <p className="font-bold text-slate-800 text-sm leading-snug">{c.name}</p>
+                            {c.notes && (
+                              <p className="text-[11px] text-slate-400 font-medium italic mt-0.5 max-w-[200px] truncate" title={c.notes}>
+                                "{c.notes}"
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
+                            {c.phone}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {c.memberType === 'member' ? (
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-100">
+                                MEMBER ({c.discountPercent}% OFF)
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                BIASA (0%)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleEditCustomerClick(c)}
+                              className="text-blue-600 hover:text-blue-800 text-xs font-extrabold focus:outline-none"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCustomer(c.customerId)}
+                              className="text-rose-600 hover:text-rose-800 text-xs font-extrabold focus:outline-none"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

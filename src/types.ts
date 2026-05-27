@@ -40,6 +40,17 @@ export interface LaundryService {
 export type LaundryStatus = 'diterima' | 'dicuci' | 'dikeringkan' | 'disetrika' | 'selesai' | 'diambil';
 export type PaymentStatus = 'unpaid' | 'paid';
 
+export interface Customer {
+  customerId: string;
+  laundryId: string;
+  name: string;
+  phone: string;
+  memberType: 'regular' | 'member';
+  discountPercent: number; // standard e.g. 10 for 10%
+  notes?: string;
+  createdAt: string;
+}
+
 export interface LaundryOrder {
   orderId: string;
   laundryId: string;
@@ -58,6 +69,9 @@ export interface LaundryOrder {
   estimatedCompletion: string;
   createdAt: string;
   cashierId: string;
+  customerId?: string; // Optional: link to registered customer
+  discountPercent?: number; // Optional: percentage of discount applied (e.g. 10)
+  originalPrice?: number; // Optional: calculated price before discount
 }
 
 export interface OrderProgress {

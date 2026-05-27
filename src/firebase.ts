@@ -26,7 +26,8 @@ import {
   LaundryOrder, 
   OrderProgress, 
   LaundryPayment,
-  LaundryStatus
+  LaundryStatus,
+  Customer
 } from './types';
 
 export { libDb as db, libAuth as auth, useRealFirebase };
@@ -382,6 +383,7 @@ let cache_orders: LaundryOrder[] = [];
 let cache_progress: OrderProgress[] = [];
 let cache_payments: LaundryPayment[] = [];
 let cache_expenses: LaundryExpense[] = [];
+let cache_customers: Customer[] = [];
 
 let activeSubscriptions: (() => void)[] = [];
 
@@ -528,6 +530,19 @@ export function startFirebaseSync(user: UserProfile) {
     } catch (error) {
       console.warn("Failed to subscribe expenses sync:", error);
     }
+
+    try {
+      const unsubCustomers = onSnapshot(collection(libDb, 'laundries', laundryId, 'customers'), (snapshot) => {
+        cache_customers = snapshot.docs.map(d => d.data() as Customer);
+        localStorage.setItem('lnd_customers', JSON.stringify(cache_customers));
+        notifyStateChange();
+      }, (error) => {
+        console.warn("Active customers listener message:", error.message);
+      });
+      activeSubscriptions.push(unsubCustomers);
+    } catch (error) {
+      console.warn("Failed to subscribe customers sync:", error);
+    }
   }
 }
 
@@ -549,6 +564,7 @@ const getOrdersLocal = () => cache_orders.length > 0 ? cache_orders : getLocalSt
 const getProgressLocal = () => cache_progress.length > 0 ? cache_progress : getLocalStorageBackup('progress', []);
 const getPaymentsLocal = () => cache_payments.length > 0 ? cache_payments : getLocalStorageBackup('payments', []);
 const getExpensesLocal = () => cache_expenses.length > 0 ? cache_expenses : getLocalStorageBackup('expenses', INITIAL_EXPENSES);
+const getCustomersLocal = () => cache_customers.length > 0 ? cache_customers : getLocalStorageBackup('customers', []);
 
 // ==========================================
 // UNIFIED DATA SERVICE (DELEGATING TO PERSISTENT FIREBASE FIRESTORE)
@@ -1227,6 +1243,71 @@ export const laundryService = {
         await deleteDoc(expenseDoc);
       } catch (e) {
         handleFirestoreError(e, OperationType.DELETE, `expenses/${expenseId}`);
+      }
+    }
+    notifyStateChange();
+  },
+
+  getCustomers: (laundryId: string): Customer[] => {
+    const all = getCustomersLocal();
+    return all.filter(c => c.laundryId === laundryId);
+  },
+
+  addCustomer: async (customer: Omit<Customer, 'customerId' | 'createdAt'>): Promise<Customer> => {
+    const customerId = `cust_${Date.now()}`;
+    const newCustomer: Customer = {
+      ...customer,
+      customerId,
+      createdAt: new Date().toISOString()
+    };
+
+    cache_customers = [...cache_customers, newCustomer];
+    localStorage.setItem('lnd_customers', JSON.stringify(cache_customers));
+
+    if (useRealFirebase) {
+      try {
+        const customerDoc = doc(libDb, 'laundries', customer.laundryId, 'customers', customerId);
+        await setDoc(customerDoc, newCustomer);
+      } catch (e) {
+        handleFirestoreError(e, OperationType.CREATE, `customers/${customerId}`);
+      }
+    }
+    notifyStateChange();
+    return newCustomer;
+  },
+
+  updateCustomer: async (customerId: string, laundryId: string, updates: Partial<Customer>): Promise<void> => {
+    const all = getCustomersLocal();
+    const customer = all.find(c => c.customerId === customerId);
+    if (customer) {
+      const updatedCustomer = { ...customer, ...updates };
+      const filtered = cache_customers.filter(c => c.customerId !== customerId);
+      cache_customers = [...filtered, updatedCustomer];
+      localStorage.setItem('lnd_customers', JSON.stringify(cache_customers));
+
+      if (useRealFirebase) {
+        try {
+          const customerDoc = doc(libDb, 'laundries', laundryId, 'customers', customerId);
+          await updateDoc(customerDoc, updates);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, `customers/${customerId}`);
+        }
+      }
+      notifyStateChange();
+    }
+  },
+
+  deleteCustomer: async (laundryId: string, customerId: string): Promise<void> => {
+    const filtered = cache_customers.filter(c => c.customerId !== customerId);
+    cache_customers = filtered;
+    localStorage.setItem('lnd_customers', JSON.stringify(filtered));
+
+    if (useRealFirebase) {
+      try {
+        const customerDoc = doc(libDb, 'laundries', laundryId, 'customers', customerId);
+        await deleteDoc(customerDoc);
+      } catch (e) {
+        handleFirestoreError(e, OperationType.DELETE, `customers/${customerId}`);
       }
     }
     notifyStateChange();
