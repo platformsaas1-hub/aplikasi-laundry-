@@ -18,7 +18,7 @@ import {
   User,
   Printer
 } from 'lucide-react';
-import { laundryService } from '../firebase';
+import { laundryService, useRealFirebase } from '../firebase';
 import { LaundryOrder, OrderProgress, LaundryStatus } from '../types';
 import QRCode from 'react-qr-code';
 
@@ -28,6 +28,7 @@ export default function TrackingView() {
   const [progress, setProgress] = React.useState<OrderProgress[]>([]);
   const [errorMsg, setErrorMsg] = React.useState('');
   const [showQrSim, setShowQrSim] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
 
   // Check URL query parameters or localStorage for automatic tracking (e.g., from Vercel dynamic path rewrite)
   React.useEffect(() => {
@@ -49,22 +50,49 @@ export default function TrackingView() {
     }
   }, []);
 
-  const handleTrack = (invoice: string) => {
+  const handleTrack = async (invoice: string) => {
     setErrorMsg('');
     if (!invoice.trim()) {
       setErrorMsg('Harap masukkan nomor invoice Anda.');
       return;
     }
 
-    const foundOrder = laundryService.getOrderByInvoice(invoice);
-    if (foundOrder) {
-      setOrder(foundOrder);
-      const trace = laundryService.getOrderProgress(foundOrder.orderId);
-      setProgress(trace);
-    } else {
+    setLoading(true);
+    setOrder(null);
+    setProgress([]);
+
+    try {
+      // 1. Cek cache lokal terlebih dahulu
+      const foundOrder = laundryService.getOrderByInvoice(invoice);
+      if (foundOrder) {
+        setOrder(foundOrder);
+        const trace = laundryService.getOrderProgress(foundOrder.orderId);
+        setProgress(trace);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Jika tidak ditemukan di lokal dan menggunakan Firebase nyata (untuk user publik/belum login)
+      if (useRealFirebase) {
+        const remoteOrder = await laundryService.getOrderByInvoiceAsync(invoice);
+        if (remoteOrder) {
+          setOrder(remoteOrder);
+          const remoteTrace = await laundryService.getOrderProgressAsync(invoice);
+          setProgress(remoteTrace);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 3. Jika tidak ketemu di mana pun
       setOrder(null);
       setProgress([]);
       setErrorMsg('No. Invoice tidak ditemukan. Silakan periksa kembali ketikan Anda.');
+    } catch (error: any) {
+      console.error("Gagal melacak order:", error);
+      setErrorMsg('Terjadi kesalahan sambungan ke server. Silakan coba kembali.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -118,17 +146,28 @@ export default function TrackingView() {
               type="text"
               placeholder="Contoh: INV-2026-0001"
               value={searchVal}
+              disabled={loading}
               onChange={(e) => setSearchVal(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleTrack(searchVal)}
-              className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              onKeyDown={(e) => e.key === 'Enter' && !loading && handleTrack(searchVal)}
+              className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:opacity-75 disabled:cursor-not-allowed"
             />
           </div>
           <button 
             onClick={() => handleTrack(searchVal)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2"
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-medium px-6 py-3.5 rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed min-w-[130px]"
           >
-            <Search className="w-4 h-4" />
-            Cari Nota
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Mencari...
+              </>
+            ) : (
+              <>
+                <Search className="w-4 h-4" />
+                Cari Nota
+              </>
+            )}
           </button>
         </div>
         {errorMsg && (
@@ -140,7 +179,12 @@ export default function TrackingView() {
       </div>
 
       {/* RESULT CONTAINER */}
-      {order ? (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 bg-white border border-slate-200 rounded-2xl shadow-sm text-center">
+          <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
+          <p className="text-slate-500 font-medium text-sm">Sedang mencari data nota dan riwayat progres...</p>
+        </div>
+      ) : order ? (
         <div className="space-y-6 animate-fade-in">
           
           {/* CORE SNAPSHOT CARD */}
