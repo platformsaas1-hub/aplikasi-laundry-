@@ -518,6 +518,34 @@ export function startFirebaseSync(user: UserProfile) {
         cache_orders = snapshot.docs.map(d => d.data() as LaundryOrder);
         localStorage.setItem('lnd_orders', JSON.stringify(cache_orders));
         notifyStateChange();
+
+        // Safe self-healing: ensure all active orders are properly synced to the public track index 'orders_by_invoice'
+        cache_orders.forEach(async (order) => {
+          if (order.invoiceNo) {
+            const invoiceKey = order.invoiceNo.toUpperCase();
+            const pubRef = doc(libDb, 'orders_by_invoice', invoiceKey);
+            
+            // Sync the main order metadata
+            setDoc(pubRef, order, { merge: true }).catch(e => {
+              console.warn("Auto-healing sync error for order invoice:", invoiceKey, e);
+            });
+
+            // Sync the order's subcollection progress logs to 'orders_by_invoice/{invoiceKey}/progress/'
+            try {
+              const progColRef = collection(libDb, 'laundries', laundryId, 'orders', order.orderId, 'progress');
+              const progSnapshot = await getDocs(progColRef);
+              progSnapshot.docs.forEach(pDoc => {
+                const progData = pDoc.data();
+                const pubProgRef = doc(libDb, 'orders_by_invoice', invoiceKey, 'progress', pDoc.id);
+                setDoc(pubProgRef, progData, { merge: true }).catch(err => {
+                  console.warn("Auto-healing sync error for progress log:", pDoc.id, err);
+                });
+              });
+            } catch (progErr) {
+              console.warn("Failed to fetch order progress logs during auto-healing:", order.orderId, progErr);
+            }
+          }
+        });
       }, (error) => {
         console.warn("Active laundry orders listener message:", error.message);
       });
