@@ -217,7 +217,7 @@ export default function TrackingView() {
               <div className="p-6 bg-slate-50 border-b border-slate-100 flex flex-col items-center justify-center text-center">
                 <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs mb-3 flex items-center justify-center">
                   <QRCode 
-                    value={`${window.location.origin}/tracking/${order.invoiceNo}`}
+                    value={`${window.location.origin}/?track=${order.invoiceNo}`}
                     size={112}
                     level="H"
                   />

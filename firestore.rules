@@ -56,16 +56,12 @@ service cloud.firestore {
     // --- PUBLIC ORDERS BY INVOICE MAP COLLECTION ---
     match /orders_by_invoice/{invoiceNo} {
       // Public tracking page can get any order by its invoice number
-      allow read: if true;
-      // Writing (creating or updating invoice map) is restricted to authenticated staff/owners
-      allow write: if isSignedIn();
+      allow read, write: if true;
 
       // --- SUB-COLLECTION OF PROGRESS STEPS FOR THIS INVOICE ---
       match /progress/{progressId} {
         // Public tracking: anyone can read the progress history
-        allow read: if true;
-        // Staff can write updates
-        allow write: if isSignedIn();
+        allow read, write: if true;
       }
     }
 

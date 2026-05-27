@@ -44,9 +44,15 @@ export default function App() {
 
   // Loaded at boot
   React.useEffect(() => {
-    // Check pathname routing for Vercel/production tracking view route integration
+    // Check both query parameters and pathname routing for Vercel/production tracking view route integration
     const path = window.location.pathname;
-    if (path.includes('/tracking/')) {
+    const params = new URLSearchParams(window.location.search);
+    const invoiceQuery = params.get('track') || params.get('invoice') || params.get('tracking');
+
+    if (invoiceQuery && invoiceQuery.trim()) {
+      localStorage.setItem('lnd_direct_track_invoice', invoiceQuery.trim());
+      setCurrentTab('track');
+    } else if (path.includes('/tracking/')) {
       const parts = path.split('/tracking/');
       const invoiceNo = parts[parts.length - 1];
       if (invoiceNo && invoiceNo.trim()) {
