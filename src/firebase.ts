@@ -83,6 +83,27 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+/**
+ * Membuang field yang bernilai undefined dari sebuah objek secara rekursif
+ * agar tidak memicu error ketika write ke database Firestore.
+ */
+export function removeUndefinedFields<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => removeUndefinedFields(item)) as any;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = removeUndefinedFields(val);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
 // ==========================================
 // LANDING INITIAL STATE & SEED DATA DEFINITIONS
 // ==========================================
@@ -1024,13 +1045,16 @@ export const laundryService = {
       createdAt: new Date().toISOString()
     };
     
+    // Bersihkan field undefined jika ada
+    const cleanedOrder = removeUndefinedFields(newOrder);
+    
     // Save Order In Firestore
     const orderDoc = doc(libDb, 'laundries', order.laundryId, 'orders', orderId);
-    setDoc(orderDoc, newOrder).catch(e => handleFirestoreError(e, OperationType.CREATE, orderDoc.path));
+    setDoc(orderDoc, cleanedOrder).catch(e => handleFirestoreError(e, OperationType.CREATE, orderDoc.path));
 
     // Save Order in public tracking invoice index
     const publicInvoiceDoc = doc(libDb, 'orders_by_invoice', invoiceNo.toUpperCase());
-    setDoc(publicInvoiceDoc, newOrder).catch(e => console.warn("Error creating public invoice mapping:", e));
+    setDoc(publicInvoiceDoc, cleanedOrder).catch(e => console.warn("Error creating public invoice mapping:", e));
 
     // Save initial progress timeline entry
     const progressId = `prg_${Date.now()}_init`;
@@ -1222,8 +1246,9 @@ export const laundryService = {
 
     if (useRealFirebase) {
       try {
+        const cleanedExpense = removeUndefinedFields(newExpense);
         const expenseDoc = doc(libDb, 'laundries', expense.laundryId, 'expenses', expenseId);
-        await setDoc(expenseDoc, newExpense);
+        await setDoc(expenseDoc, cleanedExpense);
       } catch (e) {
         handleFirestoreError(e, OperationType.CREATE, `expenses/${expenseId}`);
       }
@@ -1266,8 +1291,9 @@ export const laundryService = {
 
     if (useRealFirebase) {
       try {
+        const cleanedCustomer = removeUndefinedFields(newCustomer);
         const customerDoc = doc(libDb, 'laundries', customer.laundryId, 'customers', customerId);
-        await setDoc(customerDoc, newCustomer);
+        await setDoc(customerDoc, cleanedCustomer);
       } catch (e) {
         handleFirestoreError(e, OperationType.CREATE, `customers/${customerId}`);
       }
@@ -1287,8 +1313,9 @@ export const laundryService = {
 
       if (useRealFirebase) {
         try {
+          const cleanedUpdates = removeUndefinedFields(updates);
           const customerDoc = doc(libDb, 'laundries', laundryId, 'customers', customerId);
-          await updateDoc(customerDoc, updates);
+          await updateDoc(customerDoc, cleanedUpdates);
         } catch (e) {
           handleFirestoreError(e, OperationType.UPDATE, `customers/${customerId}`);
         }
